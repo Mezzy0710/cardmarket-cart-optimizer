@@ -1605,11 +1605,15 @@ function optimizeCart(sellers, offerGroups) {
 }
 
 function buildInitialAssignment(groups, sellers, shippingRecords) {
-  const cheapestByCard = groups.map((group) => group.candidates[0]).filter(Boolean);
-  const currentCartAssignment = groups.map((group) => group.candidates.find((offer) => offer.sellerIndex === group.offers[0]?.sellerIndex) || group.candidates[0]).filter(Boolean);
+  // Every assignment array below must stay index-aligned with `groups` (one slot per
+  // group, `undefined` for excluded groups) — optimizeBySellerMoves looks up
+  // groups[groupIndex] by that same index, so compacting away empty slots here would
+  // desync the two arrays and cause it to move/overwrite the wrong card's offer.
+  const cheapestByCard = groups.map((group) => group.candidates[0]);
+  const currentCartAssignment = groups.map((group) => group.candidates.find((offer) => offer.sellerIndex === group.offers[0]?.sellerIndex) || group.candidates[0]);
   const consolidatedAssignments = sellers
     .map((_, sellerIndex) => groups.map((group) => group.candidates.find((offer) => offer.sellerIndex === sellerIndex)))
-    .filter((assignment) => assignment.length && assignment.every(Boolean));
+    .filter((assignment) => assignment.length && assignment.every((offer, i) => offer || groups[i].candidates.length === 0));
   const candidates = [cheapestByCard, currentCartAssignment, ...consolidatedAssignments].filter((assignment) => assignment.length);
 
   return candidates.reduce((bestAssignment, assignment) => {
@@ -1667,12 +1671,13 @@ function optimizeBySellerMoves(initialSelection, groups, sellers, shippingRecord
     }
   }
 
-  return { selectedOffers: selection, score, iterations };
+  return { selectedOffers: selection.filter(Boolean), score, iterations };
 }
 
 function scoreSelection(selection, sellers, shippingRecords) {
-  const sellerCosts = estimateSelectedSellerCosts(selection, sellers, shippingRecords);
-  const cardTotal = selection.reduce((sum, offer) => sum + Number(offer.requiredQuantity || offer.quantity || 1) * Number(offer.unitPrice || 0), 0);
+  const validSelection = selection.filter(Boolean);
+  const sellerCosts = estimateSelectedSellerCosts(validSelection, sellers, shippingRecords);
+  const cardTotal = validSelection.reduce((sum, offer) => sum + Number(offer.requiredQuantity || offer.quantity || 1) * Number(offer.unitPrice || 0), 0);
   const fixedTotal = sellerCosts.reduce((sum, cost) => sum + cost.totalCost, 0);
   const shippingTotal = sellerCosts.reduce((sum, cost) => sum + (Number.isFinite(cost.shippingValue) ? cost.shippingValue : 0), 0);
   const trusteeTotal = sellerCosts.reduce((sum, cost) => sum + (Number.isFinite(cost.trusteeFeeValue) ? cost.trusteeFeeValue : 0), 0);

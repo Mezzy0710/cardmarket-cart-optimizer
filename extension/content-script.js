@@ -774,9 +774,13 @@
       ...section.querySelectorAll("tr, [role='row'], .article-row, .cart-item, .item-row, .product-row")
     ].filter((row) => {
       const text = visibleText(row);
+      // A leading "1x" quantity marker means this is a real item row, even if a
+      // seller's own comment happens to contain a word (e.g. "Fast Shipping!")
+      // that would otherwise look like the seller-level summary/shipping/total field.
+      const looksLikeItemRow = /^\s*\d+\s*[x×]\s*\S/i.test(text);
       return (
         /(?:€|EUR|\d+[,.]\d{2})/.test(text) &&
-        !/\b(summary|shipping|shipment|trustee|total)\b/i.test(text)
+        (looksLikeItemRow || !/\b(summary|shipping|shipment|trustee|total)\b/i.test(text))
       );
     });
 
